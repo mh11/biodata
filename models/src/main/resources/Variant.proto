@@ -13,5 +13,6 @@ message VariantFileAttributes {
 
 
 message VariantSample {
-    required string sample = 1;
+    required string genotype = 1;
+    required string sample = 2;
 }
