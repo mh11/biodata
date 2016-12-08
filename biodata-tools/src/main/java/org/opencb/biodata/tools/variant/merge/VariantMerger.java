@@ -4,10 +4,8 @@
 package org.opencb.biodata.tools.variant.merge;
 
 import htsjdk.variant.vcf.VCFConstants;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.opencb.biodata.models.feature.Genotype;
@@ -21,6 +19,7 @@ import org.opencb.biodata.models.variant.avro.VariantType;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -487,12 +486,14 @@ public class VariantMerger {
                             sampleName, other.getImpl(), sampleToGt));
                 }
                 String updatedGt = updateGT(gt, altIdx, otherAltIdx);
+                List<Integer> updatedGtPositions = Collections.emptyList();
                 if (alreadyInStudy) {
                     String currGT = sampleToGt.get(sampleName);
                     List<String> gtlst = new ArrayList<>(Arrays.asList(currGT.split(",")));
                     if (!gtlst.contains(updatedGt)) {
                         gtlst.add(updatedGt);
-                        updatedGt = StringUtils.join(gtlst, ',');
+                        updatedGtPositions = collapseGT(gtlst);
+                        updatedGt = StringUtils.join(updatedGtPositions.stream().map(p -> gtlst.get(p)).collect(Collectors.toList()), ',');
                         isGtUpdated = true;
                     }
                     sampleToGt.put(sampleName, updatedGt);
@@ -505,7 +506,7 @@ public class VariantMerger {
                     String currFilter = sampleToFilter.get(sampleName);
                     List<String> filterLst = new ArrayList<>(Arrays.asList(currFilter.split(",")));
                     filterLst.add(filter);
-                    filter = StringUtils.join(filterLst, ',');
+                    filter = StringUtils.join(updatedGtPositions.stream().map(p -> filterLst.get(p)).collect(Collectors.toList()), ',');
                 }
                 sampleToFilter.put(sampleName, filter);
 
@@ -567,6 +568,60 @@ public class VariantMerger {
         }
         study.setSamplesPosition(samplesPosition);
         study.setSamplesData(Arrays.asList(samplesData));
+    }
+
+    private <T> List<Integer> getMatchingPositions(List<T> list, Predicate<T> p){
+        List<Integer> matching = new ArrayList<>();
+        for (int i = 0; i < list.size(); i++) {
+            if (p.test(list.get(i))) {
+                matching.add(Integer.valueOf(i));
+            }
+        }
+        return matching;
+    }
+
+    /**
+     * Collapses a list of GT to a minimal set.
+     * @param gtlst
+     * @return
+     */
+    private List<Integer> collapseGT(List<String> gtlst) {
+        if (gtlst.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (gtlst.size() == 1) {
+            return Collections.singletonList(0);
+        }
+
+        // only get GT with an ALT e.g 0/1 0/2 1/2 etc. (ignore ./. and 0/0 GT)
+        Predicate<String> findAlts = gt -> Arrays.stream(new Genotype(gt).getAllelesIdx()).anyMatch(i -> i > 0);
+        Predicate<String> findHomRef = gt -> gt.equals(Genotype.HOM_REF);
+        Predicate<String> findOneRef = gt -> Arrays.stream(new Genotype(gt).getAllelesIdx()).anyMatch(i -> i == 0);
+        Predicate<String> findNoCalls = gt -> Arrays.stream(new Genotype(gt).getAllelesIdx()).anyMatch(i -> i < 0);
+
+        List<Integer> oneAltAllele = getMatchingPositions(gtlst, findAlts);
+        if (!oneAltAllele.isEmpty()) {
+            return oneAltAllele;
+        }
+        List<Integer> reference = getMatchingPositions(gtlst, findHomRef);
+        if (!reference.isEmpty()) {
+            return reference;
+        }
+
+        List<Integer> oneReferenceAllele = getMatchingPositions(gtlst, findOneRef);
+        if (!oneReferenceAllele.isEmpty()) {
+            return oneReferenceAllele;
+        }
+        // only no-calls left -> try to collapse
+        List<Integer> nocalls = getMatchingPositions(gtlst, findNoCalls);
+        if (nocalls.size() == gtlst.size()) { // all GT found
+            return Collections.singletonList(nocalls.get(0));
+        }
+        // don't know that could be left!!!
+        if (this.collapseDeletions) {
+            throw new IllegalStateException("Not able to resolve GT: " + StringUtils.join(gtlst, ","));
+        }
+        return IntStream.range(0, gtlst.size()-1).boxed().collect(Collectors.toList());
     }
 
     private String updateGT(String gt, Map<AlternateCoordinate, Integer> curr, Map<Integer, AlternateCoordinate> other) {
