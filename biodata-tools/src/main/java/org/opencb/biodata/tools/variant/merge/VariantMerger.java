@@ -17,6 +17,9 @@ import org.opencb.biodata.models.variant.avro.FileEntry;
 import org.opencb.biodata.models.variant.avro.VariantType;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -411,8 +414,8 @@ public class VariantMerger {
                 : currentStudy.getFiles().get(0).getAttributes().getOrDefault(getAnnotationFilterKey(), getDefaultValue(getFilterKey()));
         ensureFormat(currentStudy, getFilterKey(), defaultFilterValue);
 
-        List<String> orderedSamplesName = new ArrayList<>(currentStudy.getOrderedSamplesName());
-        Set<String> currSampleNames = new HashSet<>(currentStudy.getSamplesName());
+        final List<String> orderedSamplesName = new CopyOnWriteArrayList<>(currentStudy.getOrderedSamplesName());
+        final Set<String> currSampleNames = new CopyOnWriteArraySet<>(currentStudy.getSamplesName());
 
         // Build ALT index
         List<AlternateCoordinate> altList = buildAltsList(current, varToAlts.stream().map(p -> p.getRight()).collect(Collectors.toList()));
@@ -420,8 +423,8 @@ public class VariantMerger {
 
         // Update SecALt list
         currentStudy.setSecondaryAlternates(altList.subList(1,altList.size()));
-        Map<String, Integer> formatPositions = new HashMap<>(currentStudy.getFormatPositions());
-        Map<String, Integer> additionalFormat = new HashMap<>(formatPositions);
+        final Map<String, Integer> formatPositions = new ConcurrentHashMap<>(currentStudy.getFormatPositions());
+        final Map<String, Integer> additionalFormat = new ConcurrentHashMap<>(formatPositions);
         additionalFormat.remove(getGtKey());
         additionalFormat.remove(getFilterKey());
 
@@ -431,9 +434,9 @@ public class VariantMerger {
         if (! (formatPositions.get(getGtKey()).equals(0))) {
             throw new IllegalStateException("Current study expected to be in order of 'GT'");
         }
-        Map<String, String> sampleToGt = sampleToGt(current);
-        Map<String, String> sampleToFilter = sampleToSampleData(current, getFilterKey());
-        Map<String, Map<Integer, String>> sampleToAdditional = new HashMap<>();
+        final Map<String, String> sampleToGt = sampleToGt(current);
+        final Map<String, String> sampleToFilter = sampleToSampleData(current, getFilterKey());
+        final Map<String, Map<Integer, String>> sampleToAdditional = new ConcurrentHashMap<>();
         additionalFormat.forEach((k,id) -> {
             Map<String, String> sampleToValue = sampleToSampleData(current, k);
             sampleToValue.forEach((s,v) -> {
@@ -450,9 +453,9 @@ public class VariantMerger {
             Variant other = e.getKey();
             Map<Integer, AlternateCoordinate> otherAltIdx = index(e.getValue()).entrySet().stream()
                     .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
-            StudyEntry otherStudy = getStudy(other);
-            Map<String, String> otherSampleToGt = sampleToGt(other);
-            Map<String, String> otherSampleToFilter = otherStudy.getFormat().contains(getFilterKey())
+            final StudyEntry otherStudy = getStudy(other);
+            final Map<String, String> otherSampleToGt = sampleToGt(other);
+            final Map<String, String> otherSampleToFilter = otherStudy.getFormat().contains(getFilterKey())
                     ? sampleToSampleData(other, getFilterKey())
                     : sampleToAttribute(other, getAnnotationFilterKey());
             Map<String, Map<Integer, String>> otherSampleToAdditionalFormats = new HashMap<>();
@@ -482,8 +485,9 @@ public class VariantMerger {
                 boolean isGtUpdated = false;
                 String gt = otherSampleToGt.get(sampleName);
                 if (StringUtils.isBlank(gt)) {
-                    throw new IllegalStateException(String.format("No GT found for sample %s in \nVariant: %s\nIndex:%s",
-                            sampleName, other.getImpl(), sampleToGt));
+                    throw new IllegalStateException(String.format(
+                            "No GT found for sample %s in \nVariant: %s\nIndexOther:%s\nIndex:%s",
+                            sampleName, other.getImpl(), otherSampleToGt, sampleToGt));
                 }
                 String updatedGt = updateGT(gt, altIdx, otherAltIdx);
                 List<Integer> updatedGtPositions = Collections.emptyList();
@@ -645,8 +649,8 @@ public class VariantMerger {
     private List<AlternateCoordinate> buildAltsList (Variant current, Collection<List<AlternateCoordinate>> alts) {
         Integer start = current.getStart();
         Integer end = current.getEnd();
-        List<AlternateCoordinate> currAlts = buildAltList(current);
-        Set<AlternateCoordinate> altSets = new HashSet<>(currAlts);
+        final List<AlternateCoordinate> currAlts = buildAltList(current);
+        final Set<AlternateCoordinate> altSets = new CopyOnWriteArraySet<>(currAlts);
         if (this.collapseDeletions && isDeletion(current.getType(), current.getStart(), current.getEnd())) {
             // remove all alts that are NOT fully overlap current deletion -> keep only larger or same
             alts.forEach(l -> l.stream().filter(a -> (start >= a.getStart() && end <= a.getEnd())).forEach(a -> altSets.add(a)));
@@ -769,7 +773,7 @@ public class VariantMerger {
      */
     public static List<AlternateCoordinate> buildAltList(Variant variant) {
         AlternateCoordinate mainAlternate = getMainAlternate(variant);
-        List<AlternateCoordinate> alternates = new ArrayList<>();
+        List<AlternateCoordinate> alternates = new CopyOnWriteArrayList<>();
         if (!mainAlternate.getType().equals(VariantType.NO_VARIATION)) {
             alternates.add(mainAlternate);
         }
