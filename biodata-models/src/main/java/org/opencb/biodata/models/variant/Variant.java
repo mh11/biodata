@@ -26,6 +26,7 @@ import org.opencb.biodata.models.variant.avro.VariantType;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Jacobo Coll;
@@ -36,19 +37,19 @@ public class Variant implements Serializable, Comparable<Variant> {
 
     public static final EnumSet<VariantType> SV_SUBTYPES = EnumSet.of(VariantType.INSERTION, VariantType.DELETION,
             VariantType.TRANSLOCATION, VariantType.INVERSION, VariantType.CNV);
-    private final VariantAvro impl;
-    private Map<String, StudyEntry> studyEntries = null;
+    private final AtomicReference<VariantAvro> impl = new AtomicReference<>();
+    private volatile Map<String, StudyEntry> studyEntries = null;
 
     public static final int SV_THRESHOLD = 50;
     public static final String CNVSTR = "<CN";
 
     public Variant() {
-        impl = new VariantAvro(null, new LinkedList<>(), "", -1, -1, "", "", "+", null, 0, null, new HashMap<>(), new LinkedList<>(), null);
+        impl.set(new VariantAvro(null, new LinkedList<>(), "", -1, -1, "", "", "+", null, 0, null, new HashMap<>(), new LinkedList<>(), null));
     }
 
     public Variant(VariantAvro avro) {
         Objects.requireNonNull(avro);
-        impl = avro;
+        impl.set(avro);
     }
 
     /**
@@ -122,7 +123,7 @@ public class Variant implements Serializable, Comparable<Variant> {
     }
 
     public Variant(String chromosome, int start, int end, String reference, String alternate, String strand) {
-        impl = new VariantAvro(
+        impl.set(new VariantAvro(
                 null,
                 new LinkedList<>(),
                 "",
@@ -136,7 +137,7 @@ public class Variant implements Serializable, Comparable<Variant> {
                 null,
                 new HashMap<>(),
                 new LinkedList<>(),
-                null);
+                null));
         if (start > end && !(reference.equals("-") || reference.isEmpty())) {
             throw new IllegalArgumentException("End position must be greater than the start position for variant: "
                     + chromosome + ":" + start + "-" + end + ":" + reference + ":" + alternate);
@@ -255,7 +256,7 @@ public class Variant implements Serializable, Comparable<Variant> {
 //    }
 
     public VariantAvro getImpl() {
-        return impl;
+        return impl.get();
     }
 
     public final void setChromosome(String chromosome) {
@@ -266,17 +267,17 @@ public class Variant implements Serializable, Comparable<Variant> {
         // For instance, tomato has SL2.40ch00 and that should be kept that way
         if (chromosome.startsWith("ch")) {
             if (chromosome.startsWith("chrom")) {
-                impl.setChromosome(chromosome.substring(5));
+                getImpl().setChromosome(chromosome.substring(5));
             } else if (chromosome.startsWith("chrm")) {
-                impl.setChromosome(chromosome.substring(4));
+                getImpl().setChromosome(chromosome.substring(4));
             } else if (chromosome.startsWith("chr")) {
-                impl.setChromosome(chromosome.substring(3));
+                getImpl().setChromosome(chromosome.substring(3));
             } else {
                 // Only starts with ch
-                impl.setChromosome(chromosome.substring(2));
+                getImpl().setChromosome(chromosome.substring(2));
             }
         } else {
-            impl.setChromosome(chromosome);
+            getImpl().setChromosome(chromosome);
         }
     }
 
@@ -284,107 +285,107 @@ public class Variant implements Serializable, Comparable<Variant> {
         if (start < 0) {
             throw new IllegalArgumentException("Start must be positive");
         }
-        impl.setStart(start);
+        getImpl().setStart(start);
     }
 
     public final void setEnd(Integer end) {
         if (end < 0) {
             throw new IllegalArgumentException("End must be positive");
         }
-        impl.setEnd(end);
+        getImpl().setEnd(end);
     }
 
     public void setReference(String reference) {
-        impl.setReference(reference);
+        getImpl().setReference(reference);
 //        resetLength();
     }
 
     public void setAlternate(String alternate) {
-        impl.setAlternate(alternate);
+        getImpl().setAlternate(alternate);
 //        resetLength();
     }
 
     public String getId() {
-        return impl.getId();
+        return getImpl().getId();
     }
 
     public void setId(String id) {
-        impl.setId(id);
+        getImpl().setId(id);
     }
 
     public String getChromosome() {
-        return impl.getChromosome();
+        return getImpl().getChromosome();
     }
 
     public Integer getStart() {
-        return impl.getStart();
+        return getImpl().getStart();
     }
 
     public Integer getEnd() {
-        return impl.getEnd();
+        return getImpl().getEnd();
     }
 
     public String getReference() {
-        return impl.getReference();
+        return getImpl().getReference();
     }
 
     public String getAlternate() {
-        return impl.getAlternate();
+        return getImpl().getAlternate();
     }
 
     public String getStrand() {
-        return impl.getStrand();
+        return getImpl().getStrand();
     }
 
     public void setStrand(String strand) {
-        impl.setStrand(strand);
+        getImpl().setStrand(strand);
     }
 
     public StructuralVariation getSv() {
-        return impl.getSv();
+        return getImpl().getSv();
     }
 
     public void setSv(StructuralVariation sv) {
-        impl.setSv(sv);
+        getImpl().setSv(sv);
     }
 
     @Deprecated
     public List<String> getIds() {
-        if (StringUtils.isNotEmpty(impl.getId())) {
-            if (impl.getNames() != null) {
-                List<String> ids = new ArrayList<>(1 + impl.getNames().size());
-                ids.add(impl.getId());
-                ids.addAll(impl.getNames());
+        if (StringUtils.isNotEmpty(getImpl().getId())) {
+            if (getImpl().getNames() != null) {
+                List<String> ids = new ArrayList<>(1 + getImpl().getNames().size());
+                ids.add(getImpl().getId());
+                ids.addAll(getImpl().getNames());
                 return ids;
             } else {
-                return Collections.singletonList(impl.getId());
+                return Collections.singletonList(getImpl().getId());
             }
         } else {
-            return impl.getNames();
+            return getImpl().getNames();
         }
     }
 
     @Deprecated
     public void setIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
-            impl.setId(null);
-            impl.setNames(Collections.emptyList());
+            getImpl().setId(null);
+            getImpl().setNames(Collections.emptyList());
         } else {
-            impl.setId(ids.get(0));
-            impl.setNames(ids.subList(1, ids.size()));
+            getImpl().setId(ids.get(0));
+            getImpl().setNames(ids.subList(1, ids.size()));
         }
     }
 
     public List<String> getNames() {
-        return impl.getNames();
+        return getImpl().getNames();
     }
 
     public void setNames(List<String> names) {
-        impl.setNames(names);
+        getImpl().setNames(names);
     }
 
     public Integer getLength() {
-        return impl.getLength();
+        return getImpl().getLength();
     }
 
     public Integer getLengthReference() {
@@ -400,31 +401,31 @@ public class Variant implements Serializable, Comparable<Variant> {
     }
 
     public void setLength(Integer value) {
-        impl.setLength(value);
+        getImpl().setLength(value);
     }
 
     public VariantType getType() {
-        return impl.getType();
+        return getImpl().getType();
     }
 
     public void setType(VariantType value) {
-        impl.setType(value);
+        getImpl().setType(value);
     }
 
     public Map<String, List<String>> getHgvs() {
-        return impl.getHgvs();
+        return getImpl().getHgvs();
     }
 
     public void setHgvs(Map<String, List<String>> value) {
-        impl.setHgvs(value);
+        getImpl().setHgvs(value);
     }
 
     public VariantAnnotation getAnnotation() {
-        return impl.getAnnotation();
+        return getImpl().getAnnotation();
     }
 
     public void setAnnotation(VariantAnnotation value) {
-        impl.setAnnotation(value);
+        getImpl().setAnnotation(value);
     }
 
     public boolean addHgvs(String type, String value) {
@@ -445,9 +446,9 @@ public class Variant implements Serializable, Comparable<Variant> {
 
     public void setStudies(List<StudyEntry> studies) {
         studyEntries = new HashMap<>(studies.size());
-        impl.setStudies(new ArrayList<>(studies.size()));
+        getImpl().setStudies(new ArrayList<>(studies.size()));
         for (StudyEntry study : studies) {
-            impl.getStudies().add(study.getImpl());
+            getImpl().getStudies().add(study.getImpl());
             studyEntries.put(composeId(study.getStudyId()), study);
         }
     }
@@ -458,10 +459,10 @@ public class Variant implements Serializable, Comparable<Variant> {
     }
 
     public Map<String, StudyEntry> getStudiesMap() {
-        if (impl.getStudies() != null) {
+        if (getImpl().getStudies() != null) {
             if (studyEntries == null) {
                 studyEntries = new HashMap<>();
-                for (org.opencb.biodata.models.variant.avro.StudyEntry sourceEntry : impl.getStudies()) {
+                for (org.opencb.biodata.models.variant.avro.StudyEntry sourceEntry : getImpl().getStudies()) {
                     studyEntries.put(composeId(sourceEntry.getStudyId()), new StudyEntry(sourceEntry));
                 }
             }
@@ -481,7 +482,7 @@ public class Variant implements Serializable, Comparable<Variant> {
     }
 
     public StudyEntry getStudy(String studyId) {
-        if (impl.getStudies() != null) {
+        if (getImpl().getStudies() != null) {
             return getStudiesMap().get(composeId(studyId));
         }
         return null;
@@ -491,11 +492,11 @@ public class Variant implements Serializable, Comparable<Variant> {
         if (studyEntries == null) {
             studyEntries = new HashMap<>();
         }
-        if (impl.getStudies() == null) {
-            impl.setStudies(new ArrayList<>());
+        if (getImpl().getStudies() == null) {
+            getImpl().setStudies(new ArrayList<>());
         }
         this.studyEntries.put(composeId(studyEntry.getStudyId()), studyEntry);
-        impl.getStudies().add(studyEntry.getImpl());
+        getImpl().getStudies().add(studyEntry.getImpl());
     }
 
     public Iterable<String> getSampleNames(String studyId, String fileId) {
@@ -539,7 +540,7 @@ public class Variant implements Serializable, Comparable<Variant> {
     }
 
     public String toJson() {
-        return impl.toString();
+        return getImpl().toString();
     }
 
     public boolean sameGenomicVariant(Object o) {
@@ -578,13 +579,13 @@ public class Variant implements Serializable, Comparable<Variant> {
 
         Variant variant = (Variant) o;
 
-        return !(impl != null ? !impl.equals(variant.impl) : variant.impl != null);
+        return !(getImpl() != null ? !getImpl().equals(variant.getImpl()) : variant.getImpl() != null);
 
     }
 
     @Override
     public int hashCode() {
-        return impl != null ? impl.hashCode() : 0;
+        return getImpl() != null ? getImpl().hashCode() : 0;
     }
 
 
