@@ -1,8 +1,10 @@
 package org.opencb.biodata.tools.variant.converter;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Before;
 import org.junit.Test;
+import org.opencb.biodata.models.variant.StudyEntry;
 import org.opencb.biodata.models.variant.Variant;
 import org.opencb.biodata.models.variant.VariantNormalizer;
 import org.opencb.biodata.models.variant.VariantVcfFactory;
@@ -10,8 +12,11 @@ import org.opencb.biodata.models.variant.avro.VariantType;
 import org.opencb.biodata.models.variant.protobuf.VcfSliceProtos;
 
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.opencb.biodata.models.variant.VariantTestUtils.generateVariantWithFormat;
 
 /**
@@ -76,6 +81,57 @@ public class VcfSliceToVariantListConverterTest {
     }
 
     @Test
+    public void testParallelConversion() throws InvalidProtocolBufferException {
+
+        LinkedHashMap<String, Integer> samplesPosition = variants.get(0).getStudies().get(0).getSamplesPosition();
+        VcfSliceToVariantListConverter vcfSliceToVariantListConverter = new VcfSliceToVariantListConverter(samplesPosition, "", "");
+
+        VariantToVcfSliceConverter converter = new VariantToVcfSliceConverter();
+        final byte[] sliceBytes = converter.convert(variants, 1000).toByteArray();
+
+        IntStream.range(0, 100).parallel().forEach(x -> {
+            List<Variant> collect = IntStream.range(0, 100).parallel().boxed().flatMap(i -> {
+                try {
+                    VcfSliceProtos.VcfSlice slice = VcfSliceProtos.VcfSlice.parseFrom(sliceBytes);
+                    List<Variant> convert = vcfSliceToVariantListConverter.convert(slice);
+
+                    assertEquals(VariantType.NO_VARIATION, convert.get(6).getType());
+                    assertEquals(1000, convert.get(0).getEnd().intValue());
+                    assertEquals(1000, convert.get(1).getEnd().intValue());
+                    assertEquals(1100, convert.get(6).getEnd().intValue());
+                    assertEquals("0", convert.get(3).getStudy("").getFile("").getAttributes().get(VariantVcfFactory.QUAL));
+                    assertEquals(null, convert.get(4).getStudy("").getFile("").getAttributes().get(VariantVcfFactory.QUAL));
+                    assertEquals(null, convert.get(5).getStudy("").getFile("").getAttributes().get(VariantVcfFactory.QUAL));
+                    return convert.stream();
+                } catch (InvalidProtocolBufferException e) {
+                    throw new IllegalStateException(e);
+                }
+            }).collect(Collectors.toList());
+
+            collect.parallelStream().forEach(v -> {
+                Map<String, String> gt = sampleToSampleData(v, "GT");
+                assertEquals(gt.size(), 1);
+                assertNotNull(gt.get("S1"));
+                StudyEntry studyEntry = getStudy(v);
+                String sampleData = studyEntry.getSampleData("S1", "GT");
+                assertNotNull("Sampel GT are null", sampleData);
+            });
+
+        });
+    }
+
+    private Map<String, String> sampleToSampleData(Variant var, String key){
+        StudyEntry se = getStudy(var);
+        return se.getSamplesName().stream()
+                .filter(e -> StringUtils.isNotBlank(se.getSampleData(e, key))) // check for NULL or empty string
+                .collect(Collectors.toMap(e -> e, e -> se.getSampleData(e, key)));
+    }
+
+    static StudyEntry getStudy(Variant variant) {
+        return variant.getStudies().get(0);
+    }
+
+    @Test
     public void testConvertVariants() throws InvalidProtocolBufferException {
 //        VcfSliceToVariantListConverter converter = new VcfSliceToVariantListConverter();
         VariantToVcfSliceConverter converter = new VariantToVcfSliceConverter();
@@ -95,7 +151,6 @@ public class VcfSliceToVariantListConverterTest {
         assertEquals("0", convert.get(3).getStudy("").getFile("").getAttributes().get(VariantVcfFactory.QUAL));
         assertEquals(null, convert.get(4).getStudy("").getFile("").getAttributes().get(VariantVcfFactory.QUAL));
         assertEquals(null, convert.get(5).getStudy("").getFile("").getAttributes().get(VariantVcfFactory.QUAL));
-
 
         for (int i = 0; i < convert.size(); i++) {
             // Set qual to NULL if required.

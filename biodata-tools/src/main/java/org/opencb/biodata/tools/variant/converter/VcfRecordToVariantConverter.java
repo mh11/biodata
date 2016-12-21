@@ -10,6 +10,8 @@ import org.opencb.biodata.models.variant.protobuf.VariantProto;
 import org.opencb.biodata.models.variant.protobuf.VcfSliceProtos;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.opencb.biodata.tools.variant.converter.VariantToProtoVcfRecord.EMPTY_SECONDARY_REFERENCE;
 
@@ -20,13 +22,12 @@ import static org.opencb.biodata.tools.variant.converter.VariantToProtoVcfRecord
  */
 public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.VcfRecord, Variant> {
 
-    private VcfSliceProtos.Fields fields;
+    private final AtomicReference<VcfSliceProtos.Fields> fields = new AtomicReference<>();
 
-    private final LinkedHashMap<String, Integer> samplePosition;
+    private final AtomicReference<LinkedHashMap<String, Integer>> samplePosition = new AtomicReference<>();
     private final String fileId;
     private final String studyId;
-
-
+    private final AtomicBoolean createMapCopy = new AtomicBoolean(false);
 
     public VcfRecordToVariantConverter(VcfSliceProtos.Fields fields, Map<String, Integer> samplePosition, String fileId, String studyId) {
         this(fields, StudyEntry.sortSamplesPositionMap(samplePosition), fileId, studyId);
@@ -37,13 +38,21 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
     }
 
     public VcfRecordToVariantConverter(VcfSliceProtos.Fields fields, LinkedHashMap<String, Integer> samplePosition, String fileId, String studyId) {
-
-        this.samplePosition = samplePosition;
-
-        this.fields = fields;
+        this.samplePosition.set(samplePosition);
+        this.fields.set(fields);
         this.fileId = fileId;
         this.studyId = studyId;
+    }
 
+    public void setCreateMapCopy(boolean createMapCopy) {
+        this.createMapCopy.set(createMapCopy);
+    }
+
+    protected LinkedHashMap<String, Integer> retrieveSamplePosition() {
+        if (this.createMapCopy.get()) {
+            return new LinkedHashMap<>(this.samplePosition.get());
+        }
+        return this.samplePosition.get();
     }
 
     @Override
@@ -68,16 +77,14 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
         if (vcfRecord.getType().equals(VariantProto.VariantType.NO_VARIATION)) {
             attributes.put("END", Integer.toString(end));
         }
-
         StudyEntry studyEntry = new StudyEntry(studyId);
         studyEntry.setFiles(Collections.singletonList(fileEntry));
         studyEntry.setFormat(getFormat(vcfRecord));
         studyEntry.setSamplesData(getSamplesData(vcfRecord, studyEntry.getFormatPositions()));
-        studyEntry.setSamplesPosition(samplePosition);
+        studyEntry.setSamplesPosition(retrieveSamplePosition());
         List<VariantProto.AlternateCoordinate> alts = vcfRecord.getSecondaryAlternatesList();
         studyEntry.setSecondaryAlternates(getAlternateCoordinates(alts));
         variant.addStudyEntry(studyEntry);
-
         return variant;
     }
 
@@ -111,7 +118,7 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
             }
             for (VcfSliceProtos.VcfSample vcfSample : vcfRecord.getSamplesList()) {
                 List<String> data = new ArrayList<>(formatPositions.size());
-                data.add(fields.getGts(vcfSample.getGtIndex()));
+                data.add(getFields().getGts(vcfSample.getGtIndex()));
                 data.addAll(vcfSample.getSampleValuesList());
                 samplesData.add(data);
             }
@@ -124,17 +131,17 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
         Map<String, String> attributes = new HashMap<>(vcfRecord.getInfoKeyIndexCount());
         Iterator<Integer> keyIdxIterator;
         if (vcfRecord.getInfoKeyIndexCount() != vcfRecord.getInfoValueCount()) {
-            if (fields.getDefaultInfoKeysCount() != vcfRecord.getInfoValueCount()) {
+            if (getFields().getDefaultInfoKeysCount() != vcfRecord.getInfoValueCount()) {
                 throw new UnsupportedOperationException("Number of info keys and info values mismatch");
             }
-            keyIdxIterator = fields.getDefaultInfoKeysList().iterator();
+            keyIdxIterator = getFields().getDefaultInfoKeysList().iterator();
         } else {
             keyIdxIterator = vcfRecord.getInfoKeyIndexList().iterator();
         }
         Iterator<String> valueIterator = vcfRecord.getInfoValueList().iterator();
 
         while (keyIdxIterator.hasNext()) {
-            attributes.put(fields.getInfoKeys(keyIdxIterator.next()), valueIterator.next());
+            attributes.put(getFields().getInfoKeys(keyIdxIterator.next()), valueIterator.next());
         }
 
         attributes.put(VariantVcfFactory.QUAL, getQuality(vcfRecord));
@@ -172,11 +179,11 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
     }
 
     private String getFilter(VcfSliceProtos.VcfRecord vcfRecord) {
-        return fields.getFilters(vcfRecord.getFilterIndex());
+        return getFields().getFilters(vcfRecord.getFilterIndex());
     }
 
     private List<String> getFormat(VcfSliceProtos.VcfRecord vcfRecord) {
-        String format = fields.getFormats(vcfRecord.getFormatIndex());
+        String format = getFields().getFormats(vcfRecord.getFormatIndex());
         return Arrays.asList(format.split(":"));
     }
 
@@ -229,11 +236,11 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
     }
 
     public VcfSliceProtos.Fields getFields() {
-        return fields;
+        return fields.get();
     }
 
     public VcfRecordToVariantConverter setFields(VcfSliceProtos.Fields fields) {
-        this.fields = fields;
+        this.fields.set(fields);
         return this;
     }
 }
