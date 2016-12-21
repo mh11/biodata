@@ -26,6 +26,7 @@ import org.opencb.biodata.models.variant.avro.VariantType;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -38,7 +39,7 @@ public class Variant implements Serializable, Comparable<Variant> {
     public static final EnumSet<VariantType> SV_SUBTYPES = EnumSet.of(VariantType.INSERTION, VariantType.DELETION,
             VariantType.TRANSLOCATION, VariantType.INVERSION, VariantType.CNV);
     private final AtomicReference<VariantAvro> impl = new AtomicReference<>();
-    private volatile Map<String, StudyEntry> studyEntries = null;
+    private final AtomicReference<ConcurrentHashMap<String, StudyEntry>> studyEntries = new AtomicReference<>();
 
     public static final int SV_THRESHOLD = 50;
     public static final String CNVSTR = "<CN";
@@ -157,7 +158,7 @@ public class Variant implements Serializable, Comparable<Variant> {
 //        this.resetHGVS();
 
 //        this.annotation = new VariantAnnotation(this.chromosome, this.start, this.end, this.reference, this.alternate);
-        studyEntries = new HashMap<>();
+        this.studyEntries.set(new ConcurrentHashMap<>());
     }
 
     private Integer getCopyNumberFromStr(String cnvStr) {
@@ -445,11 +446,11 @@ public class Variant implements Serializable, Comparable<Variant> {
     }
 
     public void setStudies(List<StudyEntry> studies) {
-        studyEntries = new HashMap<>(studies.size());
+        studyEntries.set(new ConcurrentHashMap<>());
         getImpl().setStudies(new ArrayList<>(studies.size()));
         for (StudyEntry study : studies) {
             getImpl().getStudies().add(study.getImpl());
-            studyEntries.put(composeId(study.getStudyId()), study);
+            studyEntries.get().put(composeId(study.getStudyId()), study);
         }
     }
 
@@ -460,13 +461,13 @@ public class Variant implements Serializable, Comparable<Variant> {
 
     public Map<String, StudyEntry> getStudiesMap() {
         if (getImpl().getStudies() != null) {
-            if (studyEntries == null) {
-                studyEntries = new HashMap<>();
+            ;
+            if (this.studyEntries.compareAndSet(null, new ConcurrentHashMap<>())) {
                 for (org.opencb.biodata.models.variant.avro.StudyEntry sourceEntry : getImpl().getStudies()) {
-                    studyEntries.put(composeId(sourceEntry.getStudyId()), new StudyEntry(sourceEntry));
+                    studyEntries.get().put(composeId(sourceEntry.getStudyId()), new StudyEntry(sourceEntry));
                 }
             }
-            return Collections.unmodifiableMap(studyEntries);
+            return Collections.unmodifiableMap(studyEntries.get());
         }
         return null;
     }
@@ -489,13 +490,11 @@ public class Variant implements Serializable, Comparable<Variant> {
     }
 
     public void addStudyEntry(StudyEntry studyEntry) {
-        if (studyEntries == null) {
-            studyEntries = new HashMap<>();
-        }
+        this.studyEntries.compareAndSet(null, new ConcurrentHashMap<>());
         if (getImpl().getStudies() == null) {
             getImpl().setStudies(new ArrayList<>());
         }
-        this.studyEntries.put(composeId(studyEntry.getStudyId()), studyEntry);
+        this.studyEntries.get().put(composeId(studyEntry.getStudyId()), studyEntry);
         getImpl().getStudies().add(studyEntry.getImpl());
     }
 

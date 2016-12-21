@@ -52,6 +52,7 @@ public class VariantMerger {
     private final boolean collapseDeletions;
     private final Set<String> expectedSamples = new ConcurrentSkipListSet<>();
     private final Map<String, String> defaultValues = new ConcurrentHashMap<>();
+    private final AtomicReference<String> studyId = new AtomicReference<>(null);
 
     public VariantMerger() {
         this(false);
@@ -65,6 +66,18 @@ public class VariantMerger {
         setDefaultValue(getGtKey(), DEFAULT_MISSING_GT);
         setDefaultValue(getFilterKey(), DEFAULT_FILTER_VALUE);
         this.collapseDeletions = collapseDeletions;
+    }
+
+    public void setStudyId(String studyId) {
+        this.studyId.set(studyId);
+    }
+
+    private boolean hasStudyId() {
+        return this.studyId.get() != null;
+    }
+
+    private String getStudyId() {
+        return studyId.get();
     }
 
     /**
@@ -773,7 +786,7 @@ public class VariantMerger {
      * @param variant
      * @return
      */
-    public static List<AlternateCoordinate> buildAltList(Variant variant) {
+    public List<AlternateCoordinate> buildAltList(Variant variant) {
         AlternateCoordinate mainAlternate = getMainAlternate(variant);
         List<AlternateCoordinate> alternates = new CopyOnWriteArrayList<>();
         if (!mainAlternate.getType().equals(VariantType.NO_VARIATION)) {
@@ -837,13 +850,28 @@ public class VariantMerger {
     }
 
     private Map<String, String> sampleToSampleData(Variant var, String key){
+        Map<String, String> retMap = new HashMap<>();
         StudyEntry se = getStudy(var);
-        return se.getSamplesName().stream()
-                .filter(e -> StringUtils.isNotBlank(se.getSampleData(e, key))) // check for NULL or empty string
-                .collect(Collectors.toMap(e -> e, e -> se.getSampleData(e, key)));
+        LinkedHashMap<String, Integer> samplesPosition = se.getSamplesPosition();
+        List<List<String>> samplesData = se.getSamplesData();
+        Integer position = se.getFormatPositions().get(key);
+        samplesPosition.forEach((s,p) -> {
+            List<String> values = samplesData.get(p);
+            String val = values.get(position);
+            if (StringUtils.isNotBlank(val)) {
+                retMap.put(s, val);
+            }
+        });
+        return retMap;
+//        return se.getSamplesName().stream()
+//                .filter(e -> StringUtils.isNotBlank(se.getSampleData(e, key))) // check for NULL or empty string
+//                .collect(Collectors.toMap(e -> e, e -> se.getSampleData(e, key)));
     }
 
-    static StudyEntry getStudy(Variant variant) {
+    StudyEntry getStudy(Variant variant) {
+        if (hasStudyId()) {
+            return variant.getStudy(getStudyId());
+        }
         return variant.getStudies().get(0);
     }
 
