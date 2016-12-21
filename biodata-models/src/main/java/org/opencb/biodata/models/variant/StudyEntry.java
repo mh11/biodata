@@ -16,17 +16,19 @@
 
 package org.opencb.biodata.models.variant;
 
-import java.io.Serializable;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.opencb.biodata.models.variant.avro.AlternateCoordinate;
 import org.opencb.biodata.models.variant.avro.FileEntry;
 import org.opencb.biodata.models.variant.avro.VariantType;
 import org.opencb.biodata.models.variant.stats.VariantStats;
+
+import java.io.Serializable;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /** 
  * Entry that associates a variant and a file in a variant archive. It contains 
@@ -40,7 +42,7 @@ import org.opencb.biodata.models.variant.stats.VariantStats;
 public class StudyEntry implements Serializable {
 
     private volatile LinkedHashMap<String, Integer> samplesPosition = null;
-    private volatile Map<String, Integer> formatPosition = null;
+    private final AtomicReference<Map<String, Integer>> formatPosition = new AtomicReference<>();
     private volatile Map<String, VariantStats> cohortStats = null;
     private final AtomicReference<org.opencb.biodata.models.variant.avro.StudyEntry> impl = new AtomicReference<>();
     public static final String DEFAULT_COHORT = "ALL";
@@ -195,30 +197,29 @@ public class StudyEntry implements Serializable {
     }
 
     public void setFormat(List<String> value) {
-        formatPosition = null;
+        this.formatPosition.set(null);
         getImpl().setFormat(value);
     }
 
     public void addFormat(String value) {
-        formatPosition = null;
+        formatPosition.set(null);
         if (getImpl().getFormat() == null) {
-            getImpl().setFormat(new LinkedList<>());
+            getImpl().setFormat(new CopyOnWriteArrayList<>());
         }
-        List<String> format = new ArrayList<>(getImpl().getFormat().size());
+        CopyOnWriteArrayList<String> format = new CopyOnWriteArrayList<>();
         format.addAll(getImpl().getFormat());
         format.add(value);
         getImpl().setFormat(format);
     }
 
     public Map<String, Integer> getFormatPositions() {
-        if (formatPosition == null) {
-            formatPosition = new HashMap<>();
+        if (this.formatPosition.compareAndSet(null, new ConcurrentHashMap<>())) {
             int pos = 0;
             for (String format : getFormat()) {
-                formatPosition.put(format, pos++);
+                formatPosition.get().put(format, pos++);
             }
         }
-        return formatPosition;
+        return formatPosition.get();
     }
 
     public List<List<String>> getSamplesData() {
