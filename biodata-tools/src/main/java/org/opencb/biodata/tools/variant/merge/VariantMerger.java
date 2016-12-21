@@ -857,9 +857,10 @@ public class VariantMerger {
         if (Objects.isNull(samplesData)) {
             throw new IllegalStateException("No samplesData retrieved: " + var.getImpl());
         }
-        Integer formatPosition = se.getFormatPositions().get(key);
+        Map<String, Integer> formatPositions = se.getFormatPositions();
+        Integer formatPosition = formatPositions.get(key);
         if (Objects.isNull(formatPosition)) {
-            throw new IllegalStateException("No format position registered for " + key + " in " + var.getImpl());
+            throw new IllegalStateException("No format position registered for " + key + " in " + formatPositions + " in " + var.getImpl());
         }
         samplesPosition.forEach((s,samplePosition) -> {
             List<String> values = samplesData.get(samplePosition);

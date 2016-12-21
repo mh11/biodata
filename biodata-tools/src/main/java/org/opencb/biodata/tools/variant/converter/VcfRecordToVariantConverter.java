@@ -10,6 +10,7 @@ import org.opencb.biodata.models.variant.protobuf.VariantProto;
 import org.opencb.biodata.models.variant.protobuf.VcfSliceProtos;
 
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -83,7 +84,7 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
         studyEntry.setSamplesData(getSamplesData(vcfRecord, studyEntry.getFormatPositions()));
         studyEntry.setSamplesPosition(retrieveSamplePosition());
         studyEntry.getFormatPositions(); // Initialize the map
-        
+
         List<VariantProto.AlternateCoordinate> alts = vcfRecord.getSecondaryAlternatesList();
         studyEntry.setSecondaryAlternates(getAlternateCoordinates(alts));
         variant.addStudyEntry(studyEntry);
@@ -186,7 +187,7 @@ public class VcfRecordToVariantConverter implements Converter<VcfSliceProtos.Vcf
 
     private List<String> getFormat(VcfSliceProtos.VcfRecord vcfRecord) {
         String format = getFields().getFormats(vcfRecord.getFormatIndex());
-        return Arrays.asList(format.split(":"));
+        return new CopyOnWriteArrayList<>(Arrays.asList(format.split(":")));
     }
 
     public static VariantType getVariantType(VariantProto.VariantType type) {

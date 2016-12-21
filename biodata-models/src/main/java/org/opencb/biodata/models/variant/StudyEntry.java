@@ -213,11 +213,13 @@ public class StudyEntry implements Serializable {
     }
 
     public Map<String, Integer> getFormatPositions() {
-        if (this.formatPosition.compareAndSet(null, new ConcurrentHashMap<>())) {
+        if (Objects.isNull(this.formatPosition.get())) {
+            ConcurrentHashMap<String, Integer> map = new ConcurrentHashMap<>();
             int pos = 0;
             for (String format : getFormat()) {
-                formatPosition.get().put(format, pos++);
+                map.put(format, pos++);
             }
+            this.formatPosition.compareAndSet(null, map);
         }
         return formatPosition.get();
     }
