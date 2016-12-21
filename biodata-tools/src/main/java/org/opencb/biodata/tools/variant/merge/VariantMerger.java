@@ -487,8 +487,9 @@ public class VariantMerger {
                 String gt = otherSampleToGt.get(sampleName);
                 if (StringUtils.isBlank(gt)) {
                     throw new IllegalStateException(String.format(
-                        "No GT [%s] found for sample %s in \nVariant: %s\nIndexOther:%s\nIndex:%s\nOtherSe:%s",
-                        getGtKey(), sampleName, other.getImpl(), otherSampleToGt, sampleToGt, otherStudy.getSamplesData()));
+                        "No GT [%s] found for sample %s in \nVariant: %s\nIndexOther:%s\nIndex:%s\nOtherSe:%s\nOtherSp:%s",
+                        getGtKey(), sampleName, other.getImpl(), otherSampleToGt, sampleToGt, otherStudy.getSamplesData(),
+                            otherStudy.getSamplesPosition()));
                 }
                 String updatedGt = updateGT(gt, altIdx, otherAltIdx);
                 List<Integer> updatedGtPositions = Collections.emptyList();
