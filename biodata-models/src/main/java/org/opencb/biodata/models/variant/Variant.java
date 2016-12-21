@@ -32,7 +32,7 @@ import java.util.*;
  * @author Cristina Yenyxe Gonzalez Garcia &lt;cyenyxe@ebi.ac.uk&gt;
  */
 @JsonIgnoreProperties({"impl", "ids", "sourceEntries", "studiesMap", "lengthReference", "lengthAlternate"})
-public class Variant implements Serializable {
+public class Variant implements Serializable, Comparable<Variant> {
 
     public static final EnumSet<VariantType> SV_SUBTYPES = EnumSet.of(VariantType.INSERTION, VariantType.DELETION,
             VariantType.TRANSLOCATION, VariantType.INVERSION, VariantType.CNV);
@@ -683,5 +683,12 @@ public class Variant implements Serializable {
         }
     }
 
+    @Override
+    public int compareTo(Variant o) {
+        if (this.equals(o)) {
+            return 0;
+        }
+        return this.getImpl().compareTo(o.getImpl());
+    }
 }
 

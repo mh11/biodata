@@ -18,6 +18,7 @@ package org.opencb.biodata.models.variant;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -38,10 +39,10 @@ import org.opencb.biodata.models.variant.stats.VariantStats;
         "formatPositions", "fileId", "attributes", "allAttributes", "cohortStats", "secondaryAlternatesAlleles"})
 public class StudyEntry implements Serializable {
 
-    private LinkedHashMap<String, Integer> samplesPosition = null;
-    private Map<String, Integer> formatPosition = null;
-    private Map<String, VariantStats> cohortStats = null;
-    private final org.opencb.biodata.models.variant.avro.StudyEntry impl;
+    private volatile LinkedHashMap<String, Integer> samplesPosition = null;
+    private volatile Map<String, Integer> formatPosition = null;
+    private volatile Map<String, VariantStats> cohortStats = null;
+    private final AtomicReference<org.opencb.biodata.models.variant.avro.StudyEntry> impl = new AtomicReference<>();
     public static final String DEFAULT_COHORT = "ALL";
 
     public StudyEntry() {
@@ -49,7 +50,7 @@ public class StudyEntry implements Serializable {
     }
     
     public StudyEntry(org.opencb.biodata.models.variant.avro.StudyEntry other) {
-        impl = other;
+        impl.set(other);
     }
 
     public StudyEntry(String studyId) {
@@ -61,6 +62,10 @@ public class StudyEntry implements Serializable {
         if (fileId != null) {
             setFileId(fileId);
         }
+    }
+
+    private void setImpl(org.opencb.biodata.models.variant.avro.StudyEntry studyEntry) {
+        this.impl.set(studyEntry);
     }
 
     /**
@@ -84,8 +89,8 @@ public class StudyEntry implements Serializable {
      */
     @Deprecated
     public StudyEntry(String fileId, String studyId, List<String> secondaryAlternates, List<String> format) {
-        this.impl = new org.opencb.biodata.models.variant.avro.StudyEntry(studyId,
-                new LinkedList<>(), null, format, new LinkedList<>(), new LinkedHashMap<>());
+        setImpl(new org.opencb.biodata.models.variant.avro.StudyEntry(studyId,
+                new LinkedList<>(), null, format, new LinkedList<>(), new LinkedHashMap<>()));
         setSecondaryAlternatesAlleles(secondaryAlternates);
         if (fileId != null) {
             setFileId(fileId);
@@ -93,8 +98,8 @@ public class StudyEntry implements Serializable {
     }
 
     public StudyEntry(String studyId, List<AlternateCoordinate> secondaryAlternates, List<String> format) {
-        this.impl = new org.opencb.biodata.models.variant.avro.StudyEntry(studyId,
-                new LinkedList<>(), null, format, new LinkedList<>(), new LinkedHashMap<>());
+        this.setImpl(new org.opencb.biodata.models.variant.avro.StudyEntry(studyId,
+                new LinkedList<>(), null, format, new LinkedList<>(), new LinkedHashMap<>()));
         setSecondaryAlternates(secondaryAlternates);
     }
 
@@ -157,7 +162,7 @@ public class StudyEntry implements Serializable {
     }
 
     public org.opencb.biodata.models.variant.avro.StudyEntry getImpl() {
-        return impl;
+        return impl.get();
     }
 
 //    public void setSamplePositions(List<String> samplePositions) {
@@ -174,7 +179,7 @@ public class StudyEntry implements Serializable {
 //    }
 
     public String getFormatAsString() {
-        return impl.getFormat() == null ? null : String.join(":", impl.getFormat());
+        return getImpl().getFormat() == null ? null : String.join(":", getImpl().getFormat());
     }
 
     public void setFormatAsString(String format) {
@@ -186,23 +191,23 @@ public class StudyEntry implements Serializable {
      * @return
      */
     public List<String> getFormat() {
-        return impl.getFormat() == null? null : Collections.unmodifiableList(impl.getFormat());
+        return getImpl().getFormat() == null? null : Collections.unmodifiableList(getImpl().getFormat());
     }
 
     public void setFormat(List<String> value) {
         formatPosition = null;
-        impl.setFormat(value);
+        getImpl().setFormat(value);
     }
 
     public void addFormat(String value) {
         formatPosition = null;
-        if (impl.getFormat() == null) {
-            impl.setFormat(new LinkedList<>());
+        if (getImpl().getFormat() == null) {
+            getImpl().setFormat(new LinkedList<>());
         }
-        List<String> format = new ArrayList<>(impl.getFormat().size());
-        format.addAll(impl.getFormat());
+        List<String> format = new ArrayList<>(getImpl().getFormat().size());
+        format.addAll(getImpl().getFormat());
         format.add(value);
-        impl.setFormat(format);
+        getImpl().setFormat(format);
     }
 
     public Map<String, Integer> getFormatPositions() {
@@ -217,11 +222,11 @@ public class StudyEntry implements Serializable {
     }
 
     public List<List<String>> getSamplesData() {
-        return impl.getSamplesData();
+        return getImpl().getSamplesData();
     }
 
     public void setSamplesData(List<List<String>> value) {
-        impl.setSamplesData(value);
+        getImpl().setSamplesData(value);
     }
 
     @Deprecated
@@ -241,7 +246,7 @@ public class StudyEntry implements Serializable {
         if (samplesPosition.containsKey(sampleName)) {
             Map<String, Integer> formatPositions = getFormatPositions();
             if (formatPositions.containsKey(field)) {
-                List<String> sampleData = impl.getSamplesData().get(samplesPosition.get(sampleName));
+                List<String> sampleData = getImpl().getSamplesData().get(samplesPosition.get(sampleName));
                 Integer formatIdx = formatPositions.get(field);
                 return  formatIdx < sampleData.size() ? sampleData.get(formatIdx) : null;
             }
@@ -254,7 +259,7 @@ public class StudyEntry implements Serializable {
         if (samplesPosition.containsKey(sampleName)) {
             HashMap<String, String> sampleDataMap = new HashMap<>();
             Iterator<String> iterator = getFormat().iterator();
-            List<String> sampleDataList = impl.getSamplesData().get(samplesPosition.get(sampleName));
+            List<String> sampleDataList = getImpl().getSamplesData().get(samplesPosition.get(sampleName));
             for (String data : sampleDataList) {
                 sampleDataMap.put(iterator.next(), data);
             }
@@ -280,13 +285,13 @@ public class StudyEntry implements Serializable {
     }
 
     public void addSampleData(String sampleName, List<String> sampleDataList) {
-        if (samplesPosition == null && impl.getSamplesData().isEmpty()) {
+        if (samplesPosition == null && getImpl().getSamplesData().isEmpty()) {
             samplesPosition = new LinkedHashMap<>();
         }
         if (samplesPosition != null) {
             if (samplesPosition.containsKey(sampleName)) {
                 int position = samplesPosition.get(sampleName);
-                while (impl.getSamplesData().size() <= position) {
+                while (getImpl().getSamplesData().size() <= position) {
                     actOnSamplesDataList((l) -> l.add(null));
                 }
                 actOnSamplesDataList((l) -> l.set(position, sampleDataList));
@@ -307,12 +312,12 @@ public class StudyEntry implements Serializable {
      * @param action Action to execute
      */
     private void actOnSamplesDataList(Consumer<List<List<String>>> action) {
-        List<List<String>> samplesDataList = impl.getSamplesData();
+        List<List<String>> samplesDataList = getImpl().getSamplesData();
         try {
             action.accept(samplesDataList);
         } catch (UnsupportedOperationException e) {
             samplesDataList = new ArrayList<>(samplesDataList);
-            impl.setSamplesData(samplesDataList);
+            getImpl().setSamplesData(samplesDataList);
             action.accept(samplesDataList);
         }
 
@@ -357,20 +362,20 @@ public class StudyEntry implements Serializable {
     private void resetStatsMap() {
         if (cohortStats == null) {
             cohortStats = new HashMap<>();
-            impl.getStats().forEach((k, v) -> cohortStats.put(k, new VariantStats(v)));
+            getImpl().getStats().forEach((k, v) -> cohortStats.put(k, new VariantStats(v)));
         }
     }
 
     public void setStats(Map<String, VariantStats> stats) {
         this.cohortStats = stats;
-        impl.setStats(new HashMap<>(stats.size()));
-        stats.forEach((k, v) -> impl.getStats().put(k, v.getImpl()));
+        getImpl().setStats(new HashMap<>(stats.size()));
+        stats.forEach((k, v) -> getImpl().getStats().put(k, v.getImpl()));
     }
 
     public void setStats(String cohortName, VariantStats stats) {
         resetStatsMap();
         cohortStats.put(cohortName, stats);
-        impl.getStats().put(cohortName, stats.getImpl());
+        getImpl().getStats().put(cohortName, stats.getImpl());
     }
 
     public VariantStats getStats(String cohortName) {
@@ -424,23 +429,23 @@ public class StudyEntry implements Serializable {
     }
 
     public String getStudyId() {
-        return impl.getStudyId();
+        return getImpl().getStudyId();
     }
 
     public void setStudyId(String value) {
-        impl.setStudyId(value);
+        getImpl().setStudyId(value);
     }
 
     public List<FileEntry> getFiles() {
-        return impl.getFiles();
+        return getImpl().getFiles();
     }
 
     public void setFiles(List<FileEntry> files) {
-        impl.setFiles(files);
+        getImpl().setFiles(files);
     }
 
     public FileEntry getFile(String fileId) {
-        for (FileEntry fileEntry : impl.getFiles()) {
+        for (FileEntry fileEntry : getImpl().getFiles()) {
             if (fileEntry.getFileId().equals(fileId)) {
                 return fileEntry;
             }
@@ -450,15 +455,15 @@ public class StudyEntry implements Serializable {
 
     @Deprecated
     public String getFileId() {
-        return !impl.getFiles().isEmpty() ? impl.getFiles().get(0).getFileId() : null;
+        return !getImpl().getFiles().isEmpty() ? getImpl().getFiles().get(0).getFileId() : null;
     }
 
     @Deprecated
     public void setFileId(String fileId) {
-        if (impl.getFiles().isEmpty()) {
-            impl.getFiles().add(new FileEntry(fileId, "", new HashMap<>()));
+        if (getImpl().getFiles().isEmpty()) {
+            getImpl().getFiles().add(new FileEntry(fileId, "", new HashMap<>()));
         } else {
-            impl.getFiles().get(0).setFileId(fileId);
+            getImpl().getFiles().get(0).setFileId(fileId);
         }
     }
 
@@ -467,9 +472,9 @@ public class StudyEntry implements Serializable {
      */
     @Deprecated
     public List<String> getSecondaryAlternatesAlleles() {
-        return impl.getSecondaryAlternates() == null
+        return getImpl().getSecondaryAlternates() == null
                 ? null
-                : Collections.unmodifiableList(impl.getSecondaryAlternates().stream()
+                : Collections.unmodifiableList(getImpl().getSecondaryAlternates().stream()
                 .map(AlternateCoordinate::getAlternate).collect(Collectors.toList()));
     }
 
@@ -485,25 +490,25 @@ public class StudyEntry implements Serializable {
                 secondaryAlternatesMap.add(new AlternateCoordinate(null, null, null, null, secondaryAlternate, VariantType.SNV));
             }
         }
-        impl.setSecondaryAlternates(secondaryAlternatesMap);
+        getImpl().setSecondaryAlternates(secondaryAlternatesMap);
     }
 
     public List<AlternateCoordinate> getSecondaryAlternates() {
-        return impl.getSecondaryAlternates();
+        return getImpl().getSecondaryAlternates();
     }
 
     public void setSecondaryAlternates(List<AlternateCoordinate> value) {
-        impl.setSecondaryAlternates(value);
+        getImpl().setSecondaryAlternates(value);
     }
 
     @Deprecated
     public Map<String, String> getAttributes() {
-        return !impl.getFiles().isEmpty() ? impl.getFiles().get(0).getAttributes() : null;
+        return !getImpl().getFiles().isEmpty() ? getImpl().getFiles().get(0).getAttributes() : null;
     }
 
     public Map<String, String> getAllAttributes() {
         Map<String, String> attributes = new HashMap<>();
-        impl.getFiles().stream().forEach(fileEntry ->
+        getImpl().getFiles().stream().forEach(fileEntry ->
                 attributes.putAll(fileEntry.getAttributes().entrySet().stream()
                         .collect(Collectors.toMap(entry -> fileEntry.getFileId() + "_" + entry.getKey(), Map.Entry::getValue))
                 )
@@ -513,27 +518,27 @@ public class StudyEntry implements Serializable {
 
     @Deprecated
     public void setAttributes(Map<String, String> attributes) {
-        if (impl.getFiles().isEmpty()) {
-            impl.getFiles().add(new FileEntry("", null, attributes));
+        if (getImpl().getFiles().isEmpty()) {
+            getImpl().getFiles().add(new FileEntry("", null, attributes));
         } else {
-            impl.getFiles().get(0).setAttributes(attributes);
+            getImpl().getFiles().get(0).setAttributes(attributes);
         }
     }
 
     @Override
     public String toString() {
-        return impl.toString();
+        return getImpl().toString();
     }
 
     @Override
     public int hashCode() {
-        return impl.hashCode();
+        return getImpl().hashCode();
     }
 
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof StudyEntry) {
-            return impl.equals(((StudyEntry) obj).getImpl());
+            return getImpl().equals(((StudyEntry) obj).getImpl());
         } else {
             return false;
         }
