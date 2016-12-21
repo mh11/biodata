@@ -18,9 +18,11 @@ import org.opencb.biodata.models.variant.avro.VariantType;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -43,23 +45,22 @@ public class VariantMerger {
     public static final String DEFAULT_FILTER_VALUE = ".";
     public static final String DEFAULT_MISSING_GT = Genotype.NOCALL;
 
-    private String gtKey;
-    private String filterKey;
-    private String annotationFilterKey;
+    private final AtomicReference<String> gtKey = new AtomicReference<>();
+    private final AtomicReference<String>  filterKey = new AtomicReference<>();
+    private final AtomicReference<String>  annotationFilterKey = new AtomicReference<>();
 
     private final boolean collapseDeletions;
-    private final Set<String> expectedSamples = new HashSet<>();
-    private final Map<String, String> defaultValues = new HashMap<>();
-
+    private final Set<String> expectedSamples = new ConcurrentSkipListSet<>();
+    private final Map<String, String> defaultValues = new ConcurrentHashMap<>();
 
     public VariantMerger() {
         this(false);
     }
 
     public VariantMerger(boolean collapseDeletions) {
-        this.gtKey = GT_KEY;
-        this.filterKey = GENOTYPE_FILTER_KEY;
-        this.annotationFilterKey = VariantVcfFactory.FILTER;
+        this.gtKey.set(GT_KEY);
+        this.filterKey.set(GENOTYPE_FILTER_KEY);
+        this.annotationFilterKey.set(VariantVcfFactory.FILTER);
 
         setDefaultValue(getGtKey(), DEFAULT_MISSING_GT);
         setDefaultValue(getFilterKey(), DEFAULT_FILTER_VALUE);
@@ -91,12 +92,12 @@ public class VariantMerger {
     }
 
     public String getGtKey() {
-        return this.gtKey;
+        return this.gtKey.get();
     }
 
     public void setGtKey(String gtKey) {
-        updateDefaultKeys(this.gtKey, gtKey);
-        this.gtKey = gtKey;
+        updateDefaultKeys(this.gtKey.get(), gtKey);
+        this.gtKey.set(gtKey);
     }
 
 
@@ -142,20 +143,20 @@ public class VariantMerger {
     }
 
     public String getFilterKey() {
-        return this.filterKey;
+        return this.filterKey.get();
     }
 
     public void setFilterKey(String filterKey) {
-        this.filterKey = filterKey;
+        this.filterKey.set(filterKey);
     }
 
     public String getAnnotationFilterKey() {
-        return annotationFilterKey;
+        return annotationFilterKey.get();
     }
 
     public void setAnnotationFilterKey(String annotationFilterKey) {
-        updateDefaultKeys(this.annotationFilterKey, annotationFilterKey);
-        this.annotationFilterKey = annotationFilterKey;
+        updateDefaultKeys(this.annotationFilterKey.get(), annotationFilterKey);
+        this.annotationFilterKey.set(annotationFilterKey);
     }
 
     /**
@@ -486,8 +487,8 @@ public class VariantMerger {
                 String gt = otherSampleToGt.get(sampleName);
                 if (StringUtils.isBlank(gt)) {
                     throw new IllegalStateException(String.format(
-                            "No GT found for sample %s in \nVariant: %s\nIndexOther:%s\nIndex:%s",
-                            sampleName, other.getImpl(), otherSampleToGt, sampleToGt));
+                        "No GT [%s] found for sample %s in \nVariant: %s\nIndexOther:%s\nIndex:%s\nOtherSe:%s",
+                        getGtKey(), sampleName, other.getImpl(), otherSampleToGt, sampleToGt, otherStudy.getSamplesData()));
                 }
                 String updatedGt = updateGT(gt, altIdx, otherAltIdx);
                 List<Integer> updatedGtPositions = Collections.emptyList();
