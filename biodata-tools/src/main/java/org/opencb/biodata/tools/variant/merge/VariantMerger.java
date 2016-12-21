@@ -854,10 +854,19 @@ public class VariantMerger {
         StudyEntry se = getStudy(var);
         LinkedHashMap<String, Integer> samplesPosition = se.getSamplesPosition();
         List<List<String>> samplesData = se.getSamplesData();
-        Integer position = se.getFormatPositions().get(key);
-        samplesPosition.forEach((s,p) -> {
-            List<String> values = samplesData.get(p);
-            String val = values.get(position);
+        if (Objects.isNull(samplesData)) {
+            throw new IllegalStateException("No samplesData retrieved: " + var.getImpl());
+        }
+        Integer formatPosition = se.getFormatPositions().get(key);
+        if (Objects.isNull(formatPosition)) {
+            throw new IllegalStateException("No format position registered for " + key + " in " + var.getImpl());
+        }
+        samplesPosition.forEach((s,samplePosition) -> {
+            List<String> values = samplesData.get(samplePosition);
+            if (Objects.isNull(values)) {
+                throw new IllegalStateException("No values for sample " + s + " at position " + samplePosition + " in " + samplesData);
+            }
+            String val = values.get(formatPosition);
             if (StringUtils.isNotBlank(val)) {
                 retMap.put(s, val);
             }
@@ -870,7 +879,11 @@ public class VariantMerger {
 
     StudyEntry getStudy(Variant variant) {
         if (hasStudyId()) {
-            return variant.getStudy(getStudyId());
+            StudyEntry study = variant.getStudy(getStudyId());
+            if (Objects.isNull(study)) {
+                throw new IllegalStateException("No study found for " + getStudyId());
+            }
+            return study;
         }
         return variant.getStudies().get(0);
     }
